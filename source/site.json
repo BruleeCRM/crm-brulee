@@ -34,7 +34,7 @@
       "Un <em class=\"accent\">artisan</em>,",
       "pas une usine."
     ],
-    "text": "Un seul expert, du premier appel à la mise en production : ni junior, ni intermédiaire. Vos équipes repartent formées et autonomes.",
+    "text": "Un seul expert, ni junior ni intermédiaire : je repère ce qui peut être ciblé et automatisé dans votre prospection, puis je le mets en place.",
     "portrait_alt": "Portrait de Tanguy, fondateur de CRM Brûlée",
     "name": "Tanguy",
     "role": "GTM engineer indépendant"
@@ -46,20 +46,20 @@
     ],
     "items": [
       {
-        "icon": "target",
-        "text": "<strong>Ciblage</strong> : votre marché ciblé sur Sales Navigator, enrichi avec Kaspr ou Clay."
+        "icon": "check",
+        "text": "<strong>Audit</strong> de votre prospection : outils, données, temps perdu."
       },
       {
-        "icon": "people",
-        "text": "<strong>Séquences</strong> e-mail et LinkedIn, personnalisées compte par compte."
+        "icon": "target",
+        "text": "<strong>Ciblage</strong> : votre marché sur Sales Navigator, enrichi avec Kaspr ou Clay."
       },
       {
         "icon": "wrench",
         "text": "<strong>Automatisation</strong> : CRM branché, leads routés, relances déclenchées."
       },
       {
-        "icon": "chart",
-        "text": "<strong>Pilotage</strong> hebdo : réponses, rendez-vous, pipeline. Tout reste chez vous."
+        "icon": "people",
+        "text": "<strong>Séquences</strong> e-mail et LinkedIn, personnalisées compte par compte."
       }
     ]
   },
