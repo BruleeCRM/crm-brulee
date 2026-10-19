@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Glass shape preview</title>
+<style>
+  body { margin: 0; background: #05060a; color: #cfd6e6; font: 12px 'Space Grotesk', system-ui, sans-serif; }
+  #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px; padding: 8px; }
+  figure { margin: 0; text-align: center; }
+  figcaption { padding: 6px 0 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #8d97ab; }
+  .cell { width: 100%; height: auto; display: block; border-radius: 10px; }
+  #stage { position: fixed; left: -9999px; top: 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.js", "three/examples/jsm/loaders/SVGLoader.js": "../vendor/SVGLoader.js" } }
+</script>
+</head>
+<body>
+<div id="sheet"></div>
+<canvas id="stage" width="520" height="520"></canvas>
+<script type="module">
+// Renders each shape as the site would: same glass, same studio, same lighting.
+// Usage:  preview.html?shapes=../assets/shapes/shape.svg,../out/bolt.svg
+//         preview.html?dir=../out&names=bolt,ring,wave
+import * as THREE from 'three';
+import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
+
+const params = new URLSearchParams(location.search);
+const dir = params.get('dir') || '../assets/shapes';
+const list = params.get('shapes')
+    ? params.get('shapes').split(',')
+    : (params.get('names') || 'shape').split(',').map(n => `${dir}/${n.trim()}.svg`);
+
+const size = 520;
+const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#stage'), antialias: true });
+renderer.setPixelRatio(1);
+renderer.setSize(size, size, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 2.2;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#05060a');
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+camera.position.set(1.1, 0.8, 6.6);
+camera.lookAt(0, 0, 0);
+
+// A soft coloured backdrop, as on the site: transmissive glass only comes alive
+// when there is something behind it to bend.
+const backdrop = document.createElement('canvas');
+backdrop.width = backdrop.height = 512;
+const paint = backdrop.getContext('2d');
+paint.fillStyle = '#05060a';
+paint.fillRect(0, 0, 512, 512);
+for (const [x, y, r, colour] of [[150, 170, 300, 'rgba(77,140,255,0.85)'],
+                                 [380, 330, 280, 'rgba(143,82,245,0.75)'],
+                                 [300, 460, 240, 'rgba(250,87,158,0.55)']]) {
+    const glow = paint.createRadialGradient(x, y, 0, x, y, r);
+    glow.addColorStop(0, colour);
+    glow.addColorStop(1, 'rgba(5,6,10,0)');
+    paint.fillStyle = glow;
+    paint.fillRect(0, 0, 512, 512);
+}
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(26, 26),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(backdrop) }));
+wall.position.z = -7;
+scene.add(wall);
+
+// Studio panels turned into an environment: this is what the glass reflects.
+const studio = new THREE.Scene();
+for (const [w, h, x, y, z, color, power] of [
+    [2.8, 8, -4, 2, 3, '#ffffff', 2.6], [0.65, 7, 3, 1, 2, '#dceeff', 4.0],
+    [5, 0.7, 0, 5, -1, '#ffffff', 3.5], [0.5, 6, -2, 0, -4, '#a78bfa', 3.0],
+    [1.0, 5, 3, -1, -3, '#ffc2e0', 2.4], [4, 0.35, 0, -3, 3, '#92bbff', 3.0],
+    [0.16, 5, -3, 0, 2, '#ffffff', 5.0], [0.35, 4, 4, 0, -2, '#ffb36b', 2.0]]) {
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(power), side: THREE.DoubleSide }));
+    panel.position.set(x, y, z);
+    panel.lookAt(0, 0, 0);
+    studio.add(panel);
+}
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(studio, 0.025, 0.1, 100).texture;
+pmrem.dispose();
+scene.add(new THREE.AmbientLight('#ffffff', 0.1));
+const key = new THREE.SpotLight('#ffffff', 18); key.position.set(4, 6, 3); key.angle = Math.PI / 4; key.penumbra = 0.9;
+scene.add(key);
+const rim = new THREE.DirectionalLight('#e3f2ff', 10); rim.position.set(-5, 3, -4); scene.add(rim);
+const fill = new THREE.DirectionalLight('#fff3e6', 0.8); fill.position.set(-2, -4, 2); scene.add(fill);
+
+const glass = new THREE.MeshPhysicalMaterial({
+    color: '#fafcff', metalness: 0, roughness: 0.025, transmission: 1, thickness: 0.48,
+    ior: 1.46, attenuationColor: new THREE.Color('#edf7ff'), attenuationDistance: 8,
+    clearcoat: 0.65, clearcoatRoughness: 0.018, iridescence: 0.6, iridescenceIOR: 1.3,
+    iridescenceThicknessRange: [100, 420], envMapIntensity: 1.1, side: THREE.DoubleSide
+});
+
+const V2 = (x, y) => new THREE.Vector2(x, y);
+function contoursOf(svgText) {
+    return new SVGLoader().parse(svgText).paths
+        .flatMap(path => path.subPaths.map(sub => sub.getPoints(6).map(p => V2(p.x, -p.y))))
+        .filter(c => c.length >= 3 && Math.abs(THREE.ShapeUtils.area(c)) > 1e-9)
+        .sort((a, b) => Math.abs(THREE.ShapeUtils.area(b)) - Math.abs(THREE.ShapeUtils.area(a)));
+}
+function inside(point, polygon) {
+    let hit = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const a = polygon[i], b = polygon[j];
+        if ((a.y > point.y) !== (b.y > point.y)
+            && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
+    }
+    return hit;
+}
+
+let mesh = null;
+async function render(url) {
+    const contours = contoursOf(await (await fetch(url)).text());
+    const bounds = new THREE.Box2().setFromPoints(contours.flat());
+    const centre = bounds.getCenter(V2());
+    const span = bounds.getSize(V2());
+    const scale = 2.9 / Math.max(span.x, span.y);
+    const fit = c => c.map(p => p.clone().sub(centre).multiplyScalar(scale));
+    const outline = fit(contours[0]);
+    const shape = new THREE.Shape(outline);
+    const group = new THREE.Group();
+    for (const contour of contours.slice(1)) {
+        const centred = fit(contour);
+        const middle = new THREE.Box2().setFromPoints(centred).getCenter(V2());
+        if (inside(middle, outline)) {
+            shape.holes.push(new THREE.Path(centred));
+        } else {
+            group.add(new THREE.Mesh(extrude(new THREE.Shape(centred)), glass));
+        }
+    }
+    group.add(new THREE.Mesh(extrude(shape), glass));
+    group.rotation.set(-0.10, 0.34, -0.06);
+    if (mesh) scene.remove(mesh);
+    mesh = group;
+    scene.add(group);
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/png');
+}
+function extrude(shape) {
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.5, steps: 1, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.04,
+        bevelSegments: 6, curveSegments: 24
+    });
+    geometry.translate(0, 0, -0.25);
+    return geometry;
+}
+
+const sheet = document.querySelector('#sheet');
+for (const url of list) {
+    const data = await render(url);
+    const figure = document.createElement('figure');
+    const image = new Image();
+    image.src = data;
+    image.className = 'cell';
+    figure.append(image, Object.assign(document.createElement('figcaption'),
+        { textContent: url.split('/').pop().replace('.svg', '') }));
+    sheet.append(figure);
+}
+document.title = 'ready';
+</script>
+</body>
+</html>

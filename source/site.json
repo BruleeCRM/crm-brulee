@@ -1,0 +1,111 @@
+{
+  "brand": "CRM Brûlée",
+  "title": "CRM Brûlée — Growth &amp; GTM engineering",
+  "meta_description": "CRM Brûlée accompagne les équipes commerciales B2B qui veulent plus de rendez-vous qualifiés : ciblage Sales Navigator, Kaspr et Clay, séquences e-mail et LinkedIn, CRM et automatisations.",
+  "email": "bonjour@crmbrulee.fr",
+  "lang": "fr",
+  "shape": "flamme",
+  "palette": [
+    "#C8791F",
+    "#FFB43A",
+    "#D98B2B",
+    "#C8791F",
+    "#D98B2B"
+  ],
+  "nav": [
+    "Accueil",
+    "À propos",
+    "La recette",
+    "Le constat",
+    "Contact"
+  ],
+  "loader_hint": "Caramélisation en cours",
+  "hero": {
+    "eyebrow": "Growth &amp; GTM engineering",
+    "title": [
+      "<em class=\"accent\">Caramélisons</em>",
+      "votre CRM."
+    ],
+    "lead": "J'accompagne les équipes commerciales B2B qui veulent plus de rendez-vous qualifiés, sans recruter : ciblage, séquences e-mail et LinkedIn, CRM automatisé.",
+    "cta": "Réserver un audit gratuit"
+  },
+  "about": {
+    "title": [
+      "Un <em class=\"accent\">artisan</em>,",
+      "pas une usine."
+    ],
+    "text": "Un seul interlocuteur, du ciblage aux automatisations. Pas de chef de projet : vous échangez directement avec la personne qui construit.",
+    "portrait_alt": "Portrait de Tanguy, fondateur de CRM Brûlée",
+    "name": "Tanguy",
+    "role": "GTM engineer indépendant"
+  },
+  "benefits": {
+    "title": [
+      "Ma <em class=\"accent\">recette</em>",
+      "en quatre temps."
+    ],
+    "items": [
+      {
+        "icon": "target",
+        "text": "<strong>Ciblage</strong> : votre marché ciblé sur Sales Navigator, enrichi avec Kaspr ou Clay."
+      },
+      {
+        "icon": "people",
+        "text": "<strong>Séquences</strong> e-mail et LinkedIn, personnalisées compte par compte."
+      },
+      {
+        "icon": "wrench",
+        "text": "<strong>Automatisation</strong> : CRM branché, leads routés, relances déclenchées."
+      },
+      {
+        "icon": "chart",
+        "text": "<strong>Pilotage</strong> hebdo : réponses, rendez-vous, pipeline. Tout reste chez vous."
+      }
+    ]
+  },
+  "results": {
+    "title": [
+      "Prospecter,",
+      "ça <em class=\"accent\">s'automatise</em>."
+    ],
+    "lead": "Ce que disent les études sur la vente B2B : la prospection manuelle coûte cher.",
+    "source": "Sources : Salesforce, State of Sales 2024 · RAIN Group · Gartner."
+  },
+  "figures": [
+    {
+      "value": 70,
+      "suffix": " %",
+      "label": "du temps des commerciaux <br>passé hors de la vente"
+    },
+    {
+      "value": 8,
+      "suffix": "",
+      "label": "points de contact pour <br>un premier <span class=\"nobr\">rendez-vous</span>"
+    },
+    {
+      "value": 17,
+      "suffix": " %",
+      "label": "du parcours d'achat <br>avec les fournisseurs"
+    }
+  ],
+  "contact": {
+    "title": [
+      "Passons",
+      "en <em class=\"accent\">cuisine</em>."
+    ],
+    "lead": "Un outbound à lancer, un CRM à brancher, des process à automatiser ? Racontez-moi où vous en êtes : l'audit est gratuit.",
+    "chef_alt": "Tanguy en chef pâtissier, image générée par IA, caramélise une crème brûlée au chalumeau"
+  },
+  "form": {
+    "title": "Votre demande",
+    "project": "Votre cible et votre projet",
+    "project_placeholder": "Votre cible, votre CRM, ce que vous voulez automatiser…",
+    "company_placeholder": "Nom de votre entreprise"
+  },
+  "footer": {
+    "spec": "Growth &amp; GTM engineering",
+    "top": "Haut de page"
+  },
+  "tools_label": "Les outils que je branche",
+  "site_url": ""
+}
