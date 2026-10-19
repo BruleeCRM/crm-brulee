@@ -201,6 +201,17 @@ def main(argv):
         tokens[f'F{i}_SUFFIX'] = item.get('suffix', '')
         tokens[f'F{i}_LABEL'] = item['label']
 
+    # French typography: a non-breaking space before : ; ? ! and inside « », so a line
+    # never starts with a lone colon or question mark.
+    NOT_TEXT = {'LANG', 'VERSION', 'YEAR', 'EMAIL', 'BRAND_MARK', 'OG_IMAGE'}
+    for key, value in tokens.items():
+        if key in NOT_TEXT or key.startswith('ICON_') or key.endswith(('_VALUE', '_DECIMALS')):
+            continue
+        value = str(value)
+        for mark in (':', ';', '?', '!'):
+            value = value.replace(' ' + mark, '&nbsp;' + mark)
+        tokens[key] = value.replace('« ', '«&nbsp;').replace(' »', '&nbsp;»')
+
     html = (out / 'index.html').read_text(encoding='utf-8')
     missing = sorted(set(re.findall(r'{{(\w+)}}', html)) - set(tokens))
     if missing:
