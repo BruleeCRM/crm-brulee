@@ -763,14 +763,18 @@ function cameraFrame(scroll) {
     // Opening screen on phones: the text panel (with the tool logos) is tall, so the
     // flame starts a little smaller and lower, and grows back as soon as you scroll.
     const hero = 1 - smoothScrollRange(scroll, 0.03, 0.14);
-    const portraitRadius = 10.4 - Math.sin(scroll * Math.PI) * 0.4 + separation * 5.2 + morph * 0.4 + hero * 4.2;
-    const radius = lerp(landscapeRadius, portraitRadius, portrait);
-    // Landscape: shift the object sideways so it never sits under a text block.
-    // One weight per chapter, negative pushes the object right (text on the left).
+    // One weight per chapter.
     const ch1 = 1 - smoothScrollRange(scroll, 0.12, 0.24);
     const ch2 = smoothScrollRange(scroll, 0.12, 0.24) - smoothScrollRange(scroll, 0.40, 0.50);
     const ch3 = smoothScrollRange(scroll, 0.52, 0.62) - smoothScrollRange(scroll, 0.74, 0.86);
     const ch4 = smoothScrollRange(scroll, 0.74, 0.86);
+    // Chapter 2 on phones: the about card is the tallest text block, so the scattered
+    // fragments sit a little smaller and higher to stay clear of its title.
+    const portraitRadius = 10.4 - Math.sin(scroll * Math.PI) * 0.4 + separation * 5.2 + morph * 0.4
+        + hero * 4.2 + ch2 * 1.2;
+    const radius = lerp(landscapeRadius, portraitRadius, portrait);
+    // Landscape: shift the object sideways so it never sits under a text block.
+    // Negative pushes the object right (text on the left).
     const x = (-1.5 * ch1 + 1.5 * ch2 - 1.8 * ch3 - 1.4 * ch4) * (1 - portrait);
     // Portrait: +1 puts the object low on screen, -1 high; alternates per chapter.
     const stack = 1 - 2 * smoothScrollRange(scroll, 0.16, 0.26)
@@ -778,7 +782,7 @@ function cameraFrame(scroll) {
         - 2 * smoothScrollRange(scroll, 0.72, 0.82);
     const visibleHeight = 2 * radius * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     // Object centre at 70 % of the height when low, 31 % when high (clear of the header).
-    const y = -0.15 + portrait * stack * (stack > 0 ? 0.225 + hero * 0.06 : 0.195) * visibleHeight;
+    const y = -0.15 + portrait * (stack * (stack > 0 ? 0.225 + hero * 0.06 : 0.195) - ch2 * 0.03) * visibleHeight;
     // Screen-right axis for this orbit position (camera looks at the origin).
     const phi = scroll * Math.PI * 2.0;
     const right = new THREE.Vector3(Math.cos(phi), 0, -Math.sin(phi));
