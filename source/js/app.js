@@ -741,7 +741,10 @@ function cameraFrame(scroll) {
     const separation = getLogoSeparation(scroll);
     const morph = smoothScrollRange(scroll, 0.40, 0.54);
     const landscapeRadius = 4.7 - Math.sin(scroll * Math.PI) * 0.6 + separation * 2.6 + morph * 0.9;
-    const portraitRadius = 10.4 - Math.sin(scroll * Math.PI) * 0.4 + separation * 5.2 + morph * 0.4;
+    // Opening screen on phones: the text panel (with the tool logos) is tall, so the
+    // flame starts a little smaller and lower, and grows back as soon as you scroll.
+    const hero = 1 - smoothScrollRange(scroll, 0.03, 0.14);
+    const portraitRadius = 10.4 - Math.sin(scroll * Math.PI) * 0.4 + separation * 5.2 + morph * 0.4 + hero * 4.2;
     const radius = lerp(landscapeRadius, portraitRadius, portrait);
     // Landscape: shift the object sideways so it never sits under a text block.
     // One weight per chapter, negative pushes the object right (text on the left).
@@ -756,7 +759,7 @@ function cameraFrame(scroll) {
         - 2 * smoothScrollRange(scroll, 0.72, 0.82);
     const visibleHeight = 2 * radius * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     // Object centre at 70 % of the height when low, 31 % when high (clear of the header).
-    const y = -0.15 + portrait * stack * (stack > 0 ? 0.225 : 0.195) * visibleHeight;
+    const y = -0.15 + portrait * stack * (stack > 0 ? 0.225 + hero * 0.06 : 0.195) * visibleHeight;
     // Screen-right axis for this orbit position (camera looks at the origin).
     const phi = scroll * Math.PI * 2.0;
     const right = new THREE.Vector3(Math.cos(phi), 0, -Math.sin(phi));
