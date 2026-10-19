@@ -130,8 +130,27 @@ const shaderUniforms = {
     uMouse: { value: new THREE.Vector2(0, 0) },
     uScroll: { value: 0 },
     uContact: { value: 0 },
-    uVelocity: { value: 0 }
+    uVelocity: { value: 0 },
+    // Per-ribbon phases of the drizzle, set once per frame by updateRibbonPhases().
+    uRibbonPhase: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+    uRibbonLift: { value: new THREE.Vector3() },
+    uWave: { value: new THREE.Vector2() }
 };
+
+// The drizzle used to take an atan and three sines per ribbon and per pixel. Everything
+// that depends only on time and scroll is computed here once per frame instead: the
+// cosine and sine of each phase. The shader rebuilds the same curves from them with the
+// angle-sum identities, without a single trigonometric call (same pixels, measured).
+function updateRibbonPhases() {
+    const time = shaderUniforms.uTime.value * 0.065, s = shaderUniforms.uScroll.value;
+    shaderUniforms.uRibbonPhase.value.forEach((phase, k) => {
+        const contour = s * 5.0 + k * 0.28, arc = k * 0.55 + s * 3.5;
+        phase.set(Math.cos(contour), Math.sin(contour), Math.cos(arc), Math.sin(arc));
+    });
+    shaderUniforms.uRibbonLift.value.set(0.012 * Math.sin(time), 0.012 * Math.sin(time + 1), 0.012 * Math.sin(time + 2));
+    shaderUniforms.uWave.value.set(Math.cos(time), Math.sin(time));
+}
+updateRibbonPhases();
 
 let sparkParticles;
 const sparkCount = 320;
@@ -771,10 +790,24 @@ function getLogoSeparation(scroll) {
     return smoothScrollRange(scroll, 0.12, 0.28) * (1 - smoothScrollRange(scroll, 0.40, 0.54));
 }
 
-function cachedGeometry(owner, key, build) {
+// Geometry rebuilds are paid on the CPU: on a first visit, reshaping every fragment in
+// the same frame costs 4 to 16 ms on a laptop, several times that on a phone. Each frame
+// gets a small budget; a fragment left out keeps its previous shape for a frame or two,
+// which does not show in motion, and goes first on the next frame.
+const REBUILD_BUDGET_MS = 3;
+let rebuildCursor = 0;
+function rebuildBudget() {
+    const start = performance.now();
+    let builds = 0;
+    return () => builds++ === 0 || performance.now() - start < REBUILD_BUDGET_MS;
+}
+
+// Returns null, and builds nothing, when the key is not cached and the budget is spent.
+function cachedGeometry(owner, key, build, allowBuild) {
     const cache = owner.geometryCache || (owner.geometryCache = new Map());
     let geometry = cache.get(key);
     if (geometry) cache.delete(key);
+    else if (allowBuild && !allowBuild()) return null;
     else geometry = build();
     cache.set(key, geometry);
     if (cache.size > 24) {
@@ -792,6 +825,7 @@ function updateLogoPieces(scroll) {
     const geometryMorph = geometryStep(morph);
     const complete = morph >= 1;
     const assembled = separation <= 0 && morph <= 0;
+    const allowBuild = rebuildBudget();
     if (wholeBody) wholeBody.visible = assembled;
     if (glassIcon) {
         glassIcon.visible = complete;
@@ -800,39 +834,51 @@ function updateLogoPieces(scroll) {
             const hole = geometryStep(smoothScrollRange(scroll, 0.54, 0.60));
             const key = `${bevel}:${hole}`;
             if (key !== glassIcon.userData.progress) {
-                if (!glassIcon.geometryCache) glassIcon.geometry.dispose();
-                glassIcon.geometry = cachedGeometry(glassIcon, key, () => makeIconPrism(
+                // The finished shape is the one on screen: it takes the frame's first build.
+                const geometry = cachedGeometry(glassIcon, key, () => makeIconPrism(
                     lerp(SEAM_BEVEL, ICON_BEVEL.size, bevel),
-                    lerp(SEAM_BEVEL, ICON_BEVEL.thickness, bevel), hole));
-                glassIcon.userData.progress = key;
+                    lerp(SEAM_BEVEL, ICON_BEVEL.thickness, bevel), hole), allowBuild);
+                if (geometry) {
+                    if (glassIcon.userData.progress === -1) glassIcon.geometry.dispose();
+                    glassIcon.geometry = geometry;
+                    glassIcon.userData.progress = key;
+                }
             }
         }
     }
-    for (const piece of logoPieces) {
+    const count = logoPieces.length;
+    let firstSkipped = -1;
+    for (let step = 0; step < count; step++) {
+        const index = (rebuildCursor + step) % count;
+        const piece = logoPieces[index];
         const { mesh, home, targetHome, offset, twist, correspondence } = piece;
         mesh.visible = piece.isBody ? !complete && !assembled : true;
         mesh.position.copy(home).lerp(targetHome, morph).addScaledVector(offset, separation);
         mesh.rotation.set(twist.x * separation, twist.y * separation, twist.z * separation);
         if (!mesh.visible) continue;
+        let geometry;
         if (!piece.isBody && complete) {
             const bevel = geometryStep(smoothScrollRange(scroll, 0.54, 0.56));
-            mesh.geometry = bevel >= 1 ? piece.finalGeometry : cachedGeometry(piece, `extra:${bevel}`,
+            geometry = bevel >= 1 ? piece.finalGeometry : cachedGeometry(piece, `extra:${bevel}`,
                 () => makePrism(piece.targetContour, ICON_DEPTH,
                     lerp(SEAM_BEVEL, ICON_BEVEL.size, bevel),
-                    lerp(SEAM_BEVEL, ICON_BEVEL.thickness, bevel)));
+                    lerp(SEAM_BEVEL, ICON_BEVEL.thickness, bevel)), allowBuild);
         } else if (morph <= 0) {
-            mesh.geometry = piece.originalGeometry;
+            geometry = piece.originalGeometry;
         } else {
-            mesh.geometry = cachedGeometry(piece, `morph:${geometryMorph}`, () => {
+            geometry = cachedGeometry(piece, `morph:${geometryMorph}`, () => {
                 const contour = correspondence.map(({source, target}) => source.clone().lerp(target, geometryMorph));
                 // Rebuilt on the fly while the fragments travel: three bevel rings are
                 // enough in motion and halve the cost of each rebuild.
                 return makePrism(contour, lerp(LOGO_DEPTH, ICON_DEPTH, geometryMorph),
                     lerp(LOGO_BEVEL.size, SEAM_BEVEL, geometryMorph),
                     lerp(LOGO_BEVEL.thickness, SEAM_BEVEL, geometryMorph), 3);
-            });
+            }, allowBuild);
         }
+        if (geometry) mesh.geometry = geometry;
+        else if (firstSkipped < 0) firstSkipped = index;
     }
+    if (firstSkipped >= 0) rebuildCursor = firstSkipped;
 }
 
 
@@ -854,6 +900,8 @@ function createBackgroundShader() {
         uniform float uContact;
         uniform float uVelocity;
         uniform vec3 uCreme; uniform vec3 uCreme2; uniform vec3 uBrun; uniform vec3 uReflet;
+        // Per ribbon: cos/sin of the contour phase (xy) and of the arc phase (zw).
+        uniform vec4 uRibbonPhase[3]; uniform vec3 uRibbonLift; uniform vec2 uWave;
 
         mat2 rotate2d(float a) { return mat2(cos(a), -sin(a), sin(a), cos(a)); }
         float fineLine(float d, float width) {
@@ -900,18 +948,27 @@ function createBackgroundShader() {
             p.y += 0.09 * cos(p.x * 3.1 - s * 3.8 - time * 0.2);
             vec3 ribbonTint = mix(tint, uC4, c);
             for (int i = 0; i < 3; i++) {
-                float k = float(i);
-                vec2 q = p + vec2(0.0, 0.012 * sin(time + k));
+                vec2 q = p + vec2(0.0, uRibbonLift[i]);
                 float radius = length(q * vec2(0.90, 1.22));
-                float angle = atan(q.y, q.x);
-                float contour = 0.34 + k * 0.145
-                    + 0.075 * sin(angle * 2.0 + s * 5.0 + k * 0.28)
-                    + 0.022 * cos(angle * 3.0 - time);
+                // A ribbon never strays more than 0.1 from its base radius and fades out
+                // within 0.25 of its contour: pixels farther away skip it.
+                float base = 0.34 + float(i) * 0.145;
+                if (abs(radius - base) > 0.36) continue;
+                // (cos a, sin a) of the angle around the centre, then 2a and 3a by the
+                // double- and triple-angle formulas: no atan, no sin, no cos.
+                vec2 u = q * inversesqrt(max(dot(q, q), 1e-12));
+                float cos2 = u.x * u.x - u.y * u.y, sin2 = 2.0 * u.x * u.y;
+                float cos3 = u.x * (4.0 * u.x * u.x - 3.0), sin3 = u.y * (3.0 - 4.0 * u.y * u.y);
+                vec4 phase = uRibbonPhase[i];
+                float contour = base
+                    + 0.075 * (sin2 * phase.x + cos2 * phase.y)      // sin(2a + contour phase)
+                    + 0.022 * (cos3 * uWave.x + sin3 * uWave.y);     // cos(3a - time)
                 float d = radius - contour;
-                float arc = smoothstep(-0.65, 0.65, sin(angle + k * 0.55 + s * 3.5));
-                float body = exp(-pow(d * 24.0, 2.0));
-                float shoulder = exp(-pow((d + 0.02) * 12.0, 2.0));
-                color = mix(color, ribbonTint, (body * 0.17 + shoulder * 0.05) * arc * (1.0 - c * 0.72));
+                if (abs(d + 0.01) > 0.25) continue;
+                float arc = smoothstep(-0.65, 0.65, u.y * phase.z + u.x * phase.w);   // sin(a + arc phase)
+                float body = d * 24.0, shoulder = (d + 0.02) * 12.0;
+                color = mix(color, ribbonTint, (exp(-body * body) * 0.17 + exp(-shoulder * shoulder) * 0.05)
+                    * arc * (1.0 - c * 0.72));
                 color = mix(color, uReflet, fineLine(d + 0.006, 0.0011) * arc
                     * (0.50 + uVelocity * 0.2) * (1.0 - c * 0.7));
             }
@@ -1130,6 +1187,7 @@ function animate(now = performance.now()) {
         shaderUniforms.uContact.value = currentContact;   // crème turns to chocolat noir
         const velocity = reducedMotion ? 0 : Math.min(1, Math.abs(targetScroll - currentScroll) * 14);
         shaderUniforms.uVelocity.value += (velocity - shaderUniforms.uVelocity.value) * damping(0.06);
+        updateRibbonPhases();
     }
 
     updateSugarDrops(shaderUniforms.uTime.value, getLogoSeparation(currentScroll));
@@ -1346,6 +1404,12 @@ window.__glassSite = {
         }
         times.sort((x, y) => x - y);
         return { gpuMs: +times[Math.floor(times.length / 2)].toFixed(2), pixelRatio: renderer.getPixelRatio() };
+    },
+    // CPU time of one fragment update at a scroll position, geometry rebuilds included.
+    logoUpdateMs(value) {
+        const start = performance.now();
+        updateLogoPieces(value);
+        return +(performance.now() - start).toFixed(2);
     },
     get scroll() { return currentScroll; },
     get contact() { return currentContact; },
