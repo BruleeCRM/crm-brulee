@@ -1,4 +1,4 @@
-@import url("./fonts.css?v=20261020154352");
+@import url("./fonts.css?v=20261020162605");
 
 /* ============================================================================
    CRM Brûlée — palette. Ten colours, no others.
@@ -396,7 +396,18 @@ body.contact-dark .contact-btn { background: var(--creme); color: var(--brun); }
 }
 
 /* ---- Contact chapter: chocolat noir, rises over the fixed 3D stage ---- */
-.scroll-stage { height: 900vh; pointer-events: none; }
+/* About one screen of scrolling between two chapters, the distance a swipe covers. */
+.scroll-stage { position: relative; height: 460vh; pointer-events: none; }
+/* Each chapter is a resting point: a scroll gesture stops on the next chapter, never in the
+   empty stretch between two, and never skips one. The points are placed by setupNavigation()
+   in app.js at the chapter positions, a share of the stage's scroll (460vh − 100vh). */
+html.has-3d.snap-chapters { scroll-snap-type: y mandatory; }
+.snap-point {
+    position: absolute; left: 0; width: 1px; height: 1px;
+    top: calc((100% - 100vh) * var(--at));
+    scroll-snap-align: start; scroll-snap-stop: always;
+}
+html.has-3d.snap-chapters .contact { scroll-snap-align: start; scroll-snap-stop: always; }
 .grid-horizontal-line { transition: opacity 0.6s; }
 body.contact-open .story-progress, body.contact-open .grid-horizontal-line { opacity: 0; }
 

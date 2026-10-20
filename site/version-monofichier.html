@@ -496,7 +496,18 @@ body.contact-dark .contact-btn { background: var(--creme); color: var(--brun); }
 }
 
 /* ---- Contact chapter: chocolat noir, rises over the fixed 3D stage ---- */
-.scroll-stage { height: 900vh; pointer-events: none; }
+/* About one screen of scrolling between two chapters, the distance a swipe covers. */
+.scroll-stage { position: relative; height: 460vh; pointer-events: none; }
+/* Each chapter is a resting point: a scroll gesture stops on the next chapter, never in the
+   empty stretch between two, and never skips one. The points are placed by setupNavigation()
+   in app.js at the chapter positions, a share of the stage's scroll (460vh − 100vh). */
+html.has-3d.snap-chapters { scroll-snap-type: y mandatory; }
+.snap-point {
+    position: absolute; left: 0; width: 1px; height: 1px;
+    top: calc((100% - 100vh) * var(--at));
+    scroll-snap-align: start; scroll-snap-stop: always;
+}
+html.has-3d.snap-chapters .contact { scroll-snap-align: start; scroll-snap-stop: always; }
 .grid-horizontal-line { transition: opacity 0.6s; }
 body.contact-open .story-progress, body.contact-open .grid-horizontal-line { opacity: 0; }
 
@@ -2348,8 +2359,10 @@ function animate(now = performance.now()) {
         ? THREE.MathUtils.clamp((scrollTop - maxScroll) / window.innerHeight, 0, 1) : 0;
 
     // smooth physical lerp (inertia); the icon must be whole quickly once the form is reached.
-    // Reduced motion: the scene tracks the scroll almost directly, no glide afterwards.
-    currentScroll += (targetScroll - currentScroll) * damping(reducedMotion ? 0.35 : 0.025);
+    // The scroll rests on chapters now: the scene glides there in about a second, so the
+    // chapter's text shows before the visitor thinks of scrolling again (the camera follows at
+    // the same pace). Reduced motion: the scene tracks the scroll almost directly, no glide.
+    currentScroll += (targetScroll - currentScroll) * damping(reducedMotion ? 0.35 : 0.04);
     currentContact += (targetContact - currentContact) * damping(reducedMotion ? 0.35 : 0.06);
     if (Math.abs(targetContact - currentContact) < 0.0015) currentContact = targetContact;
 
@@ -2416,7 +2429,7 @@ function animate(now = performance.now()) {
     const phi = currentScroll * Math.PI * 2.0;
     const y = 0.35 + Math.sin(currentScroll * Math.PI) * 0.8;
     const targetPos = new THREE.Vector3(frame.radius * Math.sin(phi), y, frame.radius * Math.cos(phi));
-    camera.position.lerp(targetPos, damping(reducedMotion ? 0.35 : 0.025));
+    camera.position.lerp(targetPos, damping(reducedMotion ? 0.35 : 0.04));
     camera.lookAt(frame.lookAt);
     updateGlassCard();
 
@@ -2532,6 +2545,18 @@ function playFigures(show) {
 function setupNavigation() {
     const navLinks = document.querySelectorAll('.nav-link');
     const targetScrolls = [0.0, 0.34, 0.62, 0.94];
+    // The same positions are the resting points of the scroll (scroll snapping, styles.css):
+    // one gesture brings the next chapter, and the scroll never stops between two.
+    if (stageElement) {
+        targetScrolls.forEach(at => {
+            const point = document.createElement('div');
+            point.className = 'snap-point';
+            point.style.setProperty('--at', at);
+            stageElement.appendChild(point);
+        });
+        document.documentElement.classList.add('snap-chapters');
+        setupWheelPaging(targetScrolls);
+    }
     navLinks.forEach((link, index) => {
         link.addEventListener('click', (e) => {
             if (staticVersion) return;   // plain anchors in the version without 3D
@@ -2561,6 +2586,40 @@ function setupNavigation() {
             window.scrollTo({ top: contactSection.offsetTop, behavior: reducedMotion ? 'auto' : 'smooth' });
         });
     });
+}
+
+// Mouse wheels and touchpads: with snapping alone, a short swipe falls back to the chapter it
+// left, since the browser only moves on past half the way. Here one wheel gesture, whatever its
+// length and its inertia, moves exactly one chapter. Touch keeps the browser's own snapping,
+// and the contact section, taller than the screen on phones, scrolls as usual.
+function setupWheelPaging(targetScrolls) {
+    let sum = 0, used = false, quiet = 0, target = -1, targetAt = 0;
+    window.addEventListener('wheel', event => {
+        if (staticVersion || event.ctrlKey || document.body.classList.contains('is-loading')
+            || !document.documentElement.classList.contains('snap-chapters')
+            || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+        const y = window.scrollY;
+        const contactTop = contactSection ? contactSection.offsetTop : Infinity;
+        const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
+        if (y > contactTop + 2 || (y >= contactTop - 2 && delta > 0)) return;
+        event.preventDefault();
+        clearTimeout(quiet);
+        quiet = setTimeout(() => { sum = 0; used = false; }, 160);   // a pause ends the gesture
+        // The text of a chapter takes most of a second to come up: a second notch right away
+        // would skip the very chapter the visitor scrolled to.
+        if (used || performance.now() - targetAt < 600) return;
+        sum += delta;
+        if (Math.abs(sum) < 30) return;
+        used = true;
+        const stops = targetScrolls.map(at => stageMaxScroll() * at);
+        if (contactSection) stops.push(contactTop);
+        // Still travelling towards the previous target: count from there, not from where we are.
+        let here = stops.reduce((best, stop, i) => Math.abs(stop - y) < Math.abs(stops[best] - y) ? i : best, 0);
+        if (target >= 0 && performance.now() - targetAt < 1500 && Math.abs(stops[target] - y) > 2) here = target;
+        target = Math.max(0, Math.min(stops.length - 1, here + Math.sign(sum)));
+        targetAt = performance.now();
+        window.scrollTo({ top: stops[target], behavior: reducedMotion ? 'auto' : 'smooth' });
+    }, { passive: false });
 }
 
 function updateContact() {
@@ -2595,6 +2654,8 @@ function setupContactForm() {
 // QA hook: jump the smoothed scroll straight to a normalised position (0..1).
 window.__glassSite = {
     snap(value) {
+        // QA positions fall between chapters: no resting points for the rest of the visit.
+        document.documentElement.classList.remove('snap-chapters');
         window.scrollTo(0, stageMaxScroll() * value);
         currentScroll = value;
         currentContact = targetContact = 0;
