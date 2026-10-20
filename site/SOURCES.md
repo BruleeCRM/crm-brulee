@@ -1,9 +1,11 @@
 # Provenance
 
 - Moteur 3D, découpage, morphing, interface : écrits pour ce template.
-- Three.js et SVGLoader : version 0.160.0, distribution officielle du paquet `three`,
+- Three.js et SVGLoader : version 0.180.0, distribution officielle du paquet `three`
+  (fichiers minifiés `three.module.min.js` et `three.core.min.js`),
   licence MIT jointe.
-- Space Grotesk : fichiers TTF servis par Google Fonts, licence OFL jointe.
+- Space Grotesk : fichiers TTF servis par Google Fonts, convertis en WOFF2 et réduits au
+  jeu de caractères latin (flèches comprises), licence OFL jointe.
 - Formes de `tools/make_shape.py` : construites analytiquement, aucune source externe.
 - Aucune image, aucune vidéo, aucun contenu généré par IA n'est livré dans le site :
   tout ce qui s'affiche est calculé par le navigateur.

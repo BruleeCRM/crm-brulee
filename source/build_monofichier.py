@@ -36,9 +36,16 @@ def build() -> pathlib.Path:
     html = re.sub(r'<link rel="stylesheet" href="\./css/styles\.css[^"]*">',
                   lambda m: '<style>\n' + fonts_css + '\n' + styles_css + '\n</style>', html)
 
-    # 2. import map pointing at embedded modules (the loader still imports "three")
+    # 2. import map pointing at embedded modules (the loader still imports "three"). The
+    # Three.js module imports its core by a relative path, which a data: URL cannot resolve:
+    # that import is renamed to a bare name the map provides.
+    module = (ROOT / 'vendor/three.module.min.js').read_text(encoding='utf-8')
+    if '"./three.core.min.js"' not in module:
+        raise SystemExit('three.module.min.js no longer imports "./three.core.min.js"')
+    module = module.replace('"./three.core.min.js"', '"three/core"')
     imports = {
-        'three': data_uri(ROOT / 'vendor/three.module.js', 'text/javascript'),
+        'three': 'data:text/javascript;base64,' + base64.b64encode(module.encode('utf-8')).decode('ascii'),
+        'three/core': data_uri(ROOT / 'vendor/three.core.min.js', 'text/javascript'),
         'three/examples/jsm/loaders/SVGLoader.js': data_uri(ROOT / 'vendor/SVGLoader.js', 'text/javascript'),
     }
     html = re.sub(r'<script type="importmap">.*?</script>',

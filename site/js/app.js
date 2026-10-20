@@ -64,7 +64,7 @@ let glassIcon;     // single final prism: the whole final shape
 let iconOutline = [];                    // final outline, world units, centred
 let iconHoles = [];                      // its holes, punched once the fragments merge
 let lastLogoMorph = -1;
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
 let currentScroll = 0;   // smoothed accumulated scroll for lerping
 let currentContact = 0, targetContact = 0;   // 0..1 progress into the contact chapter
 const stageElement = document.querySelector('.scroll-stage');
@@ -299,6 +299,17 @@ function createGlassMaterial() {
         envMapIntensity: 1.25,
         side: THREE.DoubleSide
     });
+    // On Windows (ANGLE over Direct3D) the shader is compiled with relaxed float maths, and a
+    // few pixels of the glass's back faces come out NaN in the pass that draws them for the
+    // refraction: black specks on the fragments while they recompose. A NaN test makes the
+    // compiler keep strict maths for that pass only (measured at 1366 × 768: a few hundred
+    // pixels, then 0 to 4, for 5 % of the frame instead of 11 % when the whole glass is strict).
+    // The fallback colour is only a safety net: the strict maths alone remove the specks.
+    glass.onBeforeCompile = function (shader) {
+        if (this.side !== THREE.BackSide) return;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
+            '#include <opaque_fragment>\n\tif ( any( isnan( gl_FragColor ) ) ) gl_FragColor = vec4( attenuationColor, 1.0 );');
+    };
     return glass;
 }
 
@@ -1205,7 +1216,7 @@ document.addEventListener('visibilitychange', () => {
     cancelAnimationFrame(animationRequest);
     animationRequest = 0;
     if (!document.hidden) {
-        clock.getDelta();
+        timer.reset();
         lastFrameAt = 0;
         lastInputAt = performance.now();
         animationRequest = requestAnimationFrame(animate);
@@ -1230,7 +1241,8 @@ function animate(now = performance.now()) {
     }
     lastFrameAt = now;
     lastFrameFps = fps;
-    const deltaTime = Math.min(clock.getDelta(), 0.1);
+    timer.update();
+    const deltaTime = Math.min(timer.getDelta(), 0.1);
     const damping = factor => 1 - Math.pow(1 - factor, deltaTime * 60);
 
     // 1. target scroll [0..1] over the stage, then [0..1] into the contact chapter
@@ -1273,7 +1285,7 @@ function animate(now = performance.now()) {
     // 2. sparks physics, accelerated/turbulent on fast scroll (frozen when motion is reduced)
     if (sparkParticles && !reducedMotion) {
         const positions = sparkParticles.geometry.attributes.position.array;
-        const time = clock.getElapsedTime();
+        const time = timer.getElapsed();
         const scrollVelocity = Math.abs(targetScroll - currentScroll);
         const speedMultiplier = 1.0 + scrollVelocity * 9.0;
         const turbulence = scrollVelocity * 0.8;
@@ -1574,9 +1586,12 @@ function startScene() {
 
     createBackgroundShader();   // adds the drizzle plane as a child of the camera
 
+    // At 2 device pixels per CSS pixel and more, edges are already fine-grained: multisampling
+    // would cost four colour samples per pixel of a full-screen buffer and about a tenth of
+    // the frame time (measured), for edges the eye no longer tells apart.
     renderer = new THREE.WebGLRenderer({
         canvas: canvas,
-        antialias: true,
+        antialias: (window.devicePixelRatio || 1) < 2,
         alpha: false,
         powerPreference: "high-performance"
     });

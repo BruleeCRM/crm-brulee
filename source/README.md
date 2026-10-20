@@ -67,7 +67,7 @@ js/app.js                  Scène 3D, verre, découpage, morphing, shader, scrol
 assets/shapes/             La silhouette en verre
 assets/brand/mark.svg      Le logo du header
 assets/fonts/              Space Grotesk (300 à 700)
-vendor/                    Three.js r160 et SVGLoader
+vendor/                    Three.js r180 (minifié) et SVGLoader
 tools/make_shape.py        Bibliothèque de formes et validateur de SVG
 tools/build_site.py        Génère un site depuis un brief JSON
 serve.py                   Petit serveur local
