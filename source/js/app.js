@@ -756,6 +756,53 @@ function smoothScrollRange(scroll, start, end) {
     return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
+// ---- Free zones: on short phone screens the object fits the room the text leaves ----
+// The portrait framing below is tuned for a tall phone (375 × 812). With the browser bars
+// showing (iPhone: 664 px, 548 on an SE) the text blocks take most of the height, so for
+// each chapter the band they leave free is measured on resize, and the camera backs away
+// and re-aims whenever the object would spill out of it. When it fits, nothing changes.
+const FREE_ZONE_GAP = 4;
+const freeZones = [];
+function measureFreeZones() {
+    const header = document.querySelector('.main-header');
+    const headerBottom = header ? header.offsetTop + header.offsetHeight : 0;
+    for (let i = 0; i < 4; i++) {
+        const slide = document.getElementById(`slide-${i + 1}`);
+        if (!slide) { freeZones.length = 0; return; }
+        const top = slide.offsetTop, bottom = top + slide.offsetHeight;
+        // Text on top for chapters 1 and 3 (the object below it, down to the screen
+        // edge; the hero's scroll cue may overlay it), at the bottom for 2 and 4.
+        freeZones[i] = i % 2 === 0
+            ? [bottom + FREE_ZONE_GAP, sizes.visible - (i === 0 ? 0 : 12)]
+            : [headerBottom + FREE_ZONE_GAP, top - FREE_ZONE_GAP];
+    }
+}
+
+// Vertical extent on screen (CSS px) of the glass object for a given camera placement.
+const fitCamera = new THREE.PerspectiveCamera();
+const fitCorner = new THREE.Vector3();
+function objectScreenExtent(position, lookAt) {
+    fitCamera.copy(camera, false);
+    fitCamera.position.copy(position);
+    fitCamera.lookAt(lookAt);
+    fitCamera.updateMatrixWorld();
+    modelPivot.updateMatrixWorld(true);
+    let top = Infinity, bottom = -Infinity;
+    for (const mesh of [wholeBody, glassIcon, ...logoPieces.map(piece => piece.mesh)]) {
+        if (!mesh || !mesh.visible) continue;
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const { min, max } = mesh.geometry.boundingBox;
+        for (let corner = 0; corner < 8; corner++) {
+            fitCorner.set(corner & 1 ? max.x : min.x, corner & 2 ? max.y : min.y, corner & 4 ? max.z : min.z)
+                .applyMatrix4(mesh.matrixWorld).project(fitCamera);
+            const y = (1 - fitCorner.y) / 2 * sizes.height;
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+        }
+    }
+    return [top, bottom];
+}
+
 // Camera framing. Landscape: orbit close, object pushed sideways to clear the text
 // columns. Portrait (phones, tablets): orbit further out and stack vertically, the
 // object taking the lower half on slides 1 and 3 and the upper half on 2 and 4.
@@ -777,7 +824,7 @@ function cameraFrame(scroll) {
     // fragments sit a little smaller and higher to stay clear of its title.
     const portraitRadius = 10.4 - Math.sin(scroll * Math.PI) * 0.4 + separation * 5.2 + morph * 0.4
         + hero * 4.2 + ch2 * 1.2;
-    const radius = lerp(landscapeRadius, portraitRadius, portrait);
+    let radius = lerp(landscapeRadius, portraitRadius, portrait);
     // Landscape: shift the object sideways so it never sits under a text block.
     // Negative pushes the object right (text on the left).
     const x = (-1.5 * ch1 + 1.5 * ch2 - 1.8 * ch3 - 1.4 * ch4) * (1 - portrait);
@@ -792,6 +839,29 @@ function cameraFrame(scroll) {
     const phi = scroll * Math.PI * 2.0;
     const right = new THREE.Vector3(Math.cos(phi), 0, -Math.sin(phi));
     const lookAt = new THREE.Vector3(0, y, 0).addScaledVector(right, x);
+
+    // Short screens: keep the object inside the free zone of the chapter(s) on screen.
+    if (portrait > 0 && freeZones.length === 4 && modelPivot) {
+        const a = smoothScrollRange(scroll, 0.16, 0.26), b = smoothScrollRange(scroll, 0.44, 0.54);
+        const c = smoothScrollRange(scroll, 0.72, 0.82);
+        const weights = [1 - a, a - b, b - c, c];
+        const zoneTop = weights.reduce((sum, w, i) => sum + w * freeZones[i][0], 0);
+        const zoneBottom = weights.reduce((sum, w, i) => sum + w * freeZones[i][1], 0);
+        const position = new THREE.Vector3(radius * Math.sin(phi),
+            0.35 + Math.sin(scroll * Math.PI) * 0.8, radius * Math.cos(phi));
+        const [top, bottom] = objectScreenExtent(position, lookAt);
+        // Backing away shrinks the object around the screen centre; then nudge the aim
+        // so it sits inside the zone (a higher aim lowers the object on screen).
+        const centre = sizes.view / 2;
+        const scale = Math.min(1, (zoneBottom - zoneTop) / Math.max(1, bottom - top));
+        const fittedTop = centre + (top - centre) * scale, fittedBottom = centre + (bottom - centre) * scale;
+        const shift = fittedTop < zoneTop ? zoneTop - fittedTop
+            : fittedBottom > zoneBottom ? zoneBottom - fittedBottom : 0;
+        const fittedRadius = radius / scale;
+        const worldPerPixel = 2 * fittedRadius * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / sizes.view;
+        lookAt.y += shift * worldPerPixel * portrait;
+        radius = lerp(radius, fittedRadius, portrait);
+    }
     return { radius, lookAt, portrait };
 }
 
@@ -1022,6 +1092,7 @@ function onWindowResize() {
         renderer.getDrawingBufferSize(shaderUniforms.uResolution.value);
     }
     frameCamera();
+    measureFreeZones();
     return widthChanged;
 }
 
@@ -1094,6 +1165,7 @@ function fitTitles() {
             title.style.fontSize = `${Math.floor(size * available / widest * 0.985)}px`;
         }
     });
+    measureFreeZones();   // title sizes set the height of the text blocks
 }
 
 let animationRequest = 0;
@@ -1387,8 +1459,12 @@ window.__glassSite = {
         currentContact = targetContact = 0;
         // Let the camera settle immediately as well.
         const phi = value * Math.PI * 2.0;
-        const { radius } = cameraFrame(value);
-        if (camera) camera.position.set(radius * Math.sin(phi), 0.35 + Math.sin(value * Math.PI) * 0.8, radius * Math.cos(phi));
+        const { radius, lookAt } = cameraFrame(value);
+        if (camera) {
+            camera.position.set(radius * Math.sin(phi), 0.35 + Math.sin(value * Math.PI) * 0.8, radius * Math.cos(phi));
+            camera.lookAt(lookAt);
+        }
+        if (logoPieces.length) updateLogoPieces(value);
     },
     snapContact(value) {
         window.scrollTo(0, stageMaxScroll() + window.innerHeight * value);

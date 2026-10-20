@@ -585,6 +585,30 @@ body.has-glass-card .contact-card { background: rgba(43, 26, 14, 0.22); box-shad
     .chef-card img { border-radius: 6px; }
     .contact-mail { font-size: 17px; }
 }
+/* Short portrait screens: a phone with the browser bars showing (iPhone: 664 px and less).
+   The text blocks tighten so the 3D object keeps room; the camera does the rest. */
+@media (max-aspect-ratio: 4/5) and (max-height: 760px) {
+    #slide-1, #slide-3 { top: 80px; }
+    #slide-2, #slide-4 { bottom: 2.5%; }
+    #slide-1 .slide-eyebrow { display: none; }
+    .slide-title { margin-bottom: 10px; font-size: clamp(30px, 8.8vw, 56px); }
+    .slide-glass { padding: 13px var(--glass-pad-x) 14px; }
+    .slide-desc { font-size: 14px; line-height: 1.5; }
+    .cta-btn { margin-top: 10px; padding: 10px 16px; }
+    .about-head { margin-bottom: 10px; }
+    .slide-glass .about-portrait { width: 64px; height: 64px; }
+    .benefits { gap: 10px 12px; }
+    .benefit { gap: 7px; }
+    .benefit p { font-size: 12.5px; line-height: 1.4; }
+    .figures { gap: 14px; margin-top: 10px; padding-top: 10px; }
+    .figure dt { font-size: 26px; }
+    .figures-source { margin-top: 8px; }
+    .tools { margin-top: 10px; padding-top: 10px; }
+    .tools-viewport + .tools-viewport { margin-top: 5px; }
+    .tools--hero .tool { height: 29px; font-size: 12px; }
+    .tools--hero .tool-logo { height: 16px; }
+    .tools--hero .tool-wordmark { height: 11px; }
+}
 /* Header compaction */
 @media (max-width: 820px) {
     .header-nav { display: none; }
