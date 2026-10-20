@@ -3,6 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+/* The 3D needs WebGL 2 and import maps. Only then is html.has-3d set; without it (or
+   without JavaScript) the page opens in its version without 3D, see styles.css.
+   __glassStatic() switches to that version later if the scene cannot start. */
+(function () {
+  var root = document.documentElement;
+  try {
+    var gl = document.createElement('canvas').getContext('webgl2');
+    var maps = window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap');
+    var asked = /[?&]sans-3d\b/.test(location.search);   // preview the version without 3D
+    if (gl && maps && !asked) root.className += ' has-3d';
+    var lose = gl && gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch (e) {}
+  window.__glassStatic = function (reason) {
+    if (!/\bhas-3d\b/.test(root.className)) return;
+    root.className = root.className.replace(/\s*\bhas-3d\b/, '');
+    if (window.__glassLoader) window.__glassLoader.abort();
+    if (window.console) console.warn('CRM Brûlée : version sans 3D (' + reason + ')');
+  };
+  // A script that fails to load or throws before the scene is up: no 3D, but no broken page.
+  window.addEventListener('error', function (event) {
+    var script = event.target && event.target.tagName === 'SCRIPT';
+    if (!window.__glassReady && (script || event instanceof ErrorEvent)) window.__glassStatic('erreur au chargement');
+  }, true);
+  window.addEventListener('unhandledrejection', function () {
+    if (!window.__glassReady) window.__glassStatic('erreur au chargement');
+  });
+})();
+</script>
 <title>CRM Brûlée — Growth &amp; GTM engineering</title>
 <meta name="description" content="CRM Brûlée accompagne les équipes commerciales B2B qui veulent plus de rendez-vous qualifiés&nbsp;: ciblage Sales Navigator, Kaspr et Clay, séquences e-mail et LinkedIn, CRM et automatisations.">
 <meta name="theme-color" content="#FBF3DD">
@@ -17,7 +47,7 @@
 <meta property="og:image:alt" content="CRM Brûlée : growth et GTM engineering B2B, par Tanguy">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232B1A0E'/%3E%3Cg transform='translate(5 4.5) scale(.92)'%3E%3Cpath d='M12 1 C14 7 20 9 20 15 A8 8 0 0 1 4 15 C4 11 8 9 9 4 C10 6 11 7 12 1 Z' fill='%23F2581C'/%3E%3Cpath d='M12 10.5 C13.2 14 16.4 15.4 16.4 18.2 A4.4 4.4 0 0 1 7.6 18.2 C7.6 15.4 10.8 14 12 10.5 Z' fill='%23FFC14D'/%3E%3C/g%3E%3C/svg%3E">
-<link rel="stylesheet" href="./css/styles.css?v=20261020112305">
+<link rel="stylesheet" href="./css/styles.css?v=20261020121456">
 <script type="importmap">
 {
   "imports": {
@@ -41,6 +71,7 @@
   var el = document.getElementById('loader'), count = document.getElementById('loader-count'), fill = document.getElementById('loader-fill');
   var start = performance.now(), ready = false, rampAt = 0, shownAtRamp = 0, shown = 0, finished = false;
   var MIN_HOLD = 900, RAMP = 260;   // ms: long enough for the torch to light, then the run to 100
+  if (!/\bhas-3d\b/.test(document.documentElement.className)) { el.parentNode.removeChild(el); return; }
   document.body.classList.add('is-loading');
   function finish() {
     if (finished) return;
@@ -66,10 +97,10 @@
     if (rampAt && shown >= 99.5) { finish(); return; }
     requestAnimationFrame(tick);
   }
-  window.__glassLoader = { done: function () { ready = true; } };
+  window.__glassLoader = { done: function () { ready = true; }, abort: finish };
   requestAnimationFrame(tick);
-  setTimeout(function () { window.__glassLoader.done(); }, 15000);   // never trap the visitor
-  setTimeout(finish, 17000);
+  // Never trap the visitor: a scene still not up after 12 s gives way to the page without 3D.
+  setTimeout(function () { if (!window.__glassReady) window.__glassStatic('trop lent à démarrer'); }, 12000);
 })();
 </script>
 <div class="cursor-inner"></div>
@@ -241,6 +272,6 @@
   </div>
 </div>
 <canvas id="webgl" aria-hidden="true"></canvas>
-<script type="module" src="./js/app.js?v=20261020112305"></script>
+<script type="module" src="./js/app.js?v=20261020121456"></script>
 </body>
 </html>

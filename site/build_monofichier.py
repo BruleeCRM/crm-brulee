@@ -29,6 +29,10 @@ def build() -> pathlib.Path:
                        fonts_css)
     styles_css = (ROOT / 'css/styles.css').read_text(encoding='utf-8')
     styles_css = re.sub(r'@import url\("\./fonts\.css[^"]*"\);\s*', '', styles_css)
+    # the still flame of the version without 3D
+    styles_css = re.sub(r'url\(\.\./assets/brand/([^)]+\.jpg)\)',
+                        lambda m: 'url(' + data_uri(ROOT / 'assets/brand' / m.group(1), 'image/jpeg') + ')',
+                        styles_css)
     html = re.sub(r'<link rel="stylesheet" href="\./css/styles\.css[^"]*">',
                   lambda m: '<style>\n' + fonts_css + '\n' + styles_css + '\n</style>', html)
 

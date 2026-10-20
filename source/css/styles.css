@@ -695,3 +695,78 @@ body.is-loading { overflow: hidden; }
     }
     .line-inner { filter: none; }
 }
+
+/* ============================================================================
+   Version without 3D. html.has-3d is set in <head> only when the browser can run
+   the scene (WebGL 2 and import maps); app.js removes it if the scene fails to
+   start, loses its GPU, or runs far too slowly. Without it, and without JavaScript,
+   the page is an ordinary one that scrolls: same palette, same texts, a still
+   image of the flame.
+   ============================================================================ */
+html:not(.has-3d) { scroll-behavior: smooth; scroll-padding-top: 96px; }
+html:not(.has-3d) body {
+    background:
+        radial-gradient(60% 38% at 84% 10%, rgba(200, 121, 31, 0.14), rgba(200, 121, 31, 0) 70%),
+        radial-gradient(55% 32% at 6% 58%, rgba(200, 121, 31, 0.09), rgba(200, 121, 31, 0) 70%),
+        linear-gradient(180deg, var(--creme), var(--creme-2));
+}
+html:not(.has-3d) * { cursor: auto !important; }
+html:not(.has-3d) #webgl, html:not(.has-3d) .loader, html:not(.has-3d) .scroll-stage,
+html:not(.has-3d) .scroll-hint, html:not(.has-3d) .story-progress, html:not(.has-3d) .grid-horizontal-line,
+html:not(.has-3d) .header-progress, html:not(.has-3d) .header-counter,
+html:not(.has-3d) .cursor-inner, html:not(.has-3d) .cursor-outer, html:not(.has-3d) .cursor-label { display: none !important; }
+
+html:not(.has-3d) .cinematic-container {
+    position: static; height: auto; display: block; padding: 0; pointer-events: auto;
+}
+html:not(.has-3d) .main-header {
+    position: fixed; top: 0; left: 0; right: 0; width: auto; padding: 0 60px; z-index: 50;
+    background: rgba(251, 243, 221, 0.94); border-bottom: 1px solid rgba(43, 26, 14, 0.08);
+}
+html:not(.has-3d) main {
+    display: flex; flex-direction: column; gap: clamp(80px, 11vw, 150px);
+    max-width: 1180px; margin: 0 auto; padding: 160px 60px 140px;
+}
+html:not(.has-3d) #slide-1, html:not(.has-3d) #slide-2, html:not(.has-3d) #slide-3, html:not(.has-3d) #slide-4 {
+    position: relative; top: auto; right: auto; bottom: auto; left: auto;
+    width: auto; max-width: 680px; pointer-events: auto;
+}
+html:not(.has-3d) #slide-2, html:not(.has-3d) #slide-4 { align-self: flex-end; }
+
+/* Hero: the text on the left, the still flame on the right (below it on phones). */
+html:not(.has-3d) #slide-1 {
+    max-width: none; display: grid; align-items: center;
+    grid-template-columns: minmax(0, 560px) minmax(220px, 1fr); column-gap: clamp(32px, 6vw, 96px);
+}
+html:not(.has-3d) #slide-1 > * { grid-column: 1; }
+html:not(.has-3d) #slide-1::after {
+    content: ''; grid-column: 2; grid-row: 1 / span 3; justify-self: center;
+    width: 100%; max-width: 520px; aspect-ratio: 4 / 5;
+    background: url(../assets/brand/flamme.jpg) center / contain no-repeat;
+    /* The photo's crème edges melt into the page. */
+    -webkit-mask-image: radial-gradient(closest-side, #000 74%, transparent);
+    mask-image: radial-gradient(closest-side, #000 74%, transparent);
+}
+
+/* Everything the scroll would reveal is simply shown. */
+html:not(.has-3d) .slide-eyebrow, html:not(.has-3d) .slide-glass, html:not(.has-3d) .benefit,
+html:not(.has-3d) .figure, html:not(.has-3d) .line-inner,
+html:not(.has-3d) .contact-lead, html:not(.has-3d) .contact-mail, html:not(.has-3d) .contact-card,
+html:not(.has-3d) .contact-footer { opacity: 1; transform: none; filter: none; }
+html:not(.has-3d) .chef-card { opacity: 1; transform: rotate(3deg); }
+html:not(.has-3d) .slide .tools-track { animation-play-state: running; }
+html:not(.has-3d) .tools-viewport:hover .tools-track { animation-play-state: paused; }
+
+/* Contact: the chocolate the scene used to paint behind it. */
+html:not(.has-3d) .contact { min-height: 0; padding: 140px 60px 130px; background: var(--brun); }
+
+@media (max-width: 900px), (max-aspect-ratio: 4/5) {
+    html:not(.has-3d) { scroll-padding-top: 82px; }
+    html:not(.has-3d) .main-header { padding: 0 16px; }
+    html:not(.has-3d) main { gap: 72px; padding: 104px 16px 96px; }
+    html:not(.has-3d) #slide-2, html:not(.has-3d) #slide-4 { align-self: stretch; }
+    html:not(.has-3d) #slide-1 { grid-template-columns: minmax(0, 1fr); }
+    html:not(.has-3d) #slide-1 .slide-eyebrow { display: flex; }
+    html:not(.has-3d) #slide-1::after { grid-column: 1; grid-row: auto; max-width: 340px; margin-top: 4px; }
+    html:not(.has-3d) .contact { padding: 110px 16px 120px; }
+}

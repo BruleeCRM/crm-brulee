@@ -21,6 +21,14 @@ python site/serve.py 5180
 Puis ouvrir http://127.0.0.1:5180. Ajouter `0.0.0.0` après le port pour l'ouvrir depuis
 un téléphone sur le même Wi-Fi.
 
+## Version sans 3D
+
+Si le navigateur ne peut pas afficher la 3D (pas de WebGL 2, ancien iPhone, JavaScript
+coupé, appareil beaucoup trop lent, plantage), le site passe tout seul sur une page
+classique : mêmes textes, mêmes couleurs, une image fixe de la flamme
+(`assets/brand/flamme.jpg`). Pour la voir sur n'importe quel appareil, ajouter
+`?sans-3d` à l'adresse : https://crm-brulee.vercel.app/?sans-3d
+
 ## Modifier
 
 - **Petite retouche de texte** : directement dans `site/index.html`, puis

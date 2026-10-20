@@ -3,6 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+/* The 3D needs WebGL 2 and import maps. Only then is html.has-3d set; without it (or
+   without JavaScript) the page opens in its version without 3D, see styles.css.
+   __glassStatic() switches to that version later if the scene cannot start. */
+(function () {
+  var root = document.documentElement;
+  try {
+    var gl = document.createElement('canvas').getContext('webgl2');
+    var maps = window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap');
+    var asked = /[?&]sans-3d\b/.test(location.search);   // preview the version without 3D
+    if (gl && maps && !asked) root.className += ' has-3d';
+    var lose = gl && gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  } catch (e) {}
+  window.__glassStatic = function (reason) {
+    if (!/\bhas-3d\b/.test(root.className)) return;
+    root.className = root.className.replace(/\s*\bhas-3d\b/, '');
+    if (window.__glassLoader) window.__glassLoader.abort();
+    if (window.console) console.warn('CRM Brûlée : version sans 3D (' + reason + ')');
+  };
+  // A script that fails to load or throws before the scene is up: no 3D, but no broken page.
+  window.addEventListener('error', function (event) {
+    var script = event.target && event.target.tagName === 'SCRIPT';
+    if (!window.__glassReady && (script || event instanceof ErrorEvent)) window.__glassStatic('erreur au chargement');
+  }, true);
+  window.addEventListener('unhandledrejection', function () {
+    if (!window.__glassReady) window.__glassStatic('erreur au chargement');
+  });
+})();
+</script>
 <title>{{TITLE}}</title>
 <meta name="description" content="{{META_DESCRIPTION}}">
 <meta name="theme-color" content="#FBF3DD">
@@ -41,6 +71,7 @@
   var el = document.getElementById('loader'), count = document.getElementById('loader-count'), fill = document.getElementById('loader-fill');
   var start = performance.now(), ready = false, rampAt = 0, shownAtRamp = 0, shown = 0, finished = false;
   var MIN_HOLD = 900, RAMP = 260;   // ms: long enough for the torch to light, then the run to 100
+  if (!/\bhas-3d\b/.test(document.documentElement.className)) { el.parentNode.removeChild(el); return; }
   document.body.classList.add('is-loading');
   function finish() {
     if (finished) return;
@@ -66,10 +97,10 @@
     if (rampAt && shown >= 99.5) { finish(); return; }
     requestAnimationFrame(tick);
   }
-  window.__glassLoader = { done: function () { ready = true; } };
+  window.__glassLoader = { done: function () { ready = true; }, abort: finish };
   requestAnimationFrame(tick);
-  setTimeout(function () { window.__glassLoader.done(); }, 15000);   // never trap the visitor
-  setTimeout(finish, 17000);
+  // Never trap the visitor: a scene still not up after 12 s gives way to the page without 3D.
+  setTimeout(function () { if (!window.__glassReady) window.__glassStatic('trop lent à démarrer'); }, 12000);
 })();
 </script>
 <div class="cursor-inner"></div>

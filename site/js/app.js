@@ -95,13 +95,20 @@ function targetPixelRatio() {
 let pixelRatio = targetPixelRatio();
 const frameIntervals = [];
 function governResolution(interval) {
-    if (interval > 100) return;                       // a hitch or a wake-up, not a trend
+    if (interval > 250) return;                       // a hitch or a wake-up, not a trend
     frameIntervals.push(interval);
     if (frameIntervals.length < 60) return;
     const sorted = frameIntervals.splice(0).sort((a, b) => a - b);
     // Step down as soon as a quarter of the frames miss, not half: on a phone, one frame
     // in four dropped already reads as stutter.
     const slow = sorted[Math.floor(sorted.length * 0.75)];
+    // Already at the lowest resolution and still under 22 fps: the device cannot carry
+    // the scene. Near the top of the page, switch to the version without 3D; further
+    // down, the switch would move the page under the visitor's eyes, so the scene stays.
+    if (slow > 45 && governorScale <= 0.6 && window.scrollY < window.innerHeight) {
+        enterStaticVersion('appareil trop lent');
+        return;
+    }
     if (slow > 24 && governorScale > 0.6) {
         governorScale = Math.max(0.6, governorScale - 0.15);
         const next = targetPixelRatio();
@@ -1129,6 +1136,7 @@ function updateCursorLabel() {
     if (text !== cursorLabelText) { label.textContent = text; cursorLabelText = text; }
 }
 window.addEventListener('resize', () => {
+    if (staticVersion || !renderer) return;
     // Titles fit the width: a browser bar changing only the height leaves them alone.
     if (onWindowResize()) { headerState.chapter = -1; fitTitles(); }
 });
@@ -1168,6 +1176,25 @@ function fitTitles() {
     measureFreeZones();   // title sizes set the height of the text blocks
 }
 
+// ---- Version without 3D: the scene stops and the page becomes an ordinary one ----
+// (layout in styles.css, under html:not(.has-3d)). Triggered when the scene fails to
+// start, loses its GPU context, or the device is far too slow for it.
+let staticVersion = !document.documentElement.classList.contains('has-3d');
+function enterStaticVersion(reason) {
+    if (staticVersion) return;
+    staticVersion = true;
+    cancelAnimationFrame(animationRequest);
+    document.body.classList.remove('contact-open', 'contact-dark', 'show-scroll-hint', 'is-loading');
+    // The key figures may have been reset to 0 for their count-up.
+    document.querySelectorAll('.figure-value').forEach(el => {
+        el.textContent = Number(el.dataset.count || 0).toFixed(Number(el.dataset.decimals || 0));
+    });
+    if (window.__glassStatic) window.__glassStatic(reason instanceof Error ? reason.message : reason);
+    else document.documentElement.classList.remove('has-3d');
+    if (reason instanceof Error) console.error(reason);
+}
+canvas.addEventListener('webglcontextlost', () => enterStaticVersion('contexte WebGL perdu'));
+
 let animationRequest = 0;
 let lastFrameAt = 0, lastFrameFps = 0;
 let lastInputAt = performance.now();
@@ -1185,7 +1212,9 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 function animate(now = performance.now()) {
-    if (document.hidden) return;
+    // Switched off from outside (the loader's time limit, an error caught in <head>).
+    if (!staticVersion && !document.documentElement.classList.contains('has-3d')) enterStaticVersion('arrêt');
+    if (document.hidden || staticVersion) return;
     animationRequest = requestAnimationFrame(animate);
     const unsettled = Math.abs(THREE.MathUtils.clamp(window.scrollY / stageMaxScroll(), 0, 1) - currentScroll) > 0.0001
         || Math.abs(targetContact - currentContact) > 0.0001;
@@ -1399,13 +1428,18 @@ function setupNavigation() {
     const targetScrolls = [0.0, 0.34, 0.62, 0.94];
     navLinks.forEach((link, index) => {
         link.addEventListener('click', (e) => {
+            if (staticVersion) return;   // plain anchors in the version without 3D
             e.preventDefault();
             const targetY = stageMaxScroll() * targetScrolls[index];
             window.scrollTo({ top: targetY, behavior: reducedMotion ? 'auto' : 'smooth' });
         });
     });
     document.querySelectorAll('.brand, .footer-top').forEach(link => {
-        link.addEventListener('click', (e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' }); });
+        link.addEventListener('click', (e) => {
+            if (staticVersion) return;
+            e.preventDefault();
+            window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+        });
     });
     const hint = document.querySelector('.scroll-hint');
     if (hint) {
@@ -1416,6 +1450,7 @@ function setupNavigation() {
     document.querySelectorAll('.contact-btn, .cta-btn').forEach(button => {
         if (!contactSection) return;
         button.addEventListener('click', (e) => {
+            if (staticVersion) return;
             e.preventDefault();
             window.scrollTo({ top: contactSection.offsetTop, behavior: reducedMotion ? 'auto' : 'smooth' });
         });
@@ -1526,7 +1561,7 @@ window.__glassSite = {
     get pieces() { return logoPieces.map(p => ({ name: p.name, points: p.correspondence.length })); }
 };
 
-function init() {
+function startScene() {
     splitTitlesIntoLines();
     fitTitles();
     scene = new THREE.Scene();
@@ -1584,10 +1619,22 @@ function init() {
     document.querySelector('.slide-title').getBoundingClientRect();
     animate();
     setupNavigation();
-    setupContactForm();
     // First frame rendered, shaders compiled: release the preloader once fonts are in.
     const release = () => { fitTitles(); if (window.__glassLoader) window.__glassLoader.done(); };
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(release, release); else release();
+}
+// The scene, or the version without 3D when this browser cannot start it. The contact
+// form works in both.
+function init() {
+    if (!staticVersion) {
+        try {
+            startScene();
+            window.__glassReady = true;
+        } catch (error) {
+            enterStaticVersion(error);
+        }
+    }
+    setupContactForm();
 }
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', init, { once: true });
