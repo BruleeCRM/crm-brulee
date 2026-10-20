@@ -1,4 +1,4 @@
-@import url("./fonts.css?v=20261020105152");
+@import url("./fonts.css?v=20261020111459");
 
 /* ============================================================================
    CRM Brûlée — palette. Ten colours, no others.
@@ -52,10 +52,11 @@ body {
 
 :focus-visible { outline: 2px solid var(--flamme); outline-offset: 3px; border-radius: 4px; }
 
+/* Tallest viewport (browser bars hidden): the canvas never resizes while they slide. */
 #webgl {
     position: fixed;
     top: 0; left: 0;
-    width: 100%; height: 100%;
+    width: 100%; height: 100vh; height: 100lvh;
     z-index: 1;
     outline: none;
 }

@@ -115,10 +115,11 @@ body {
 
 :focus-visible { outline: 2px solid var(--flamme); outline-offset: 3px; border-radius: 4px; }
 
+/* Tallest viewport (browser bars hidden): the canvas never resizes while they slide. */
 #webgl {
     position: fixed;
     top: 0; left: 0;
-    width: 100%; height: 100%;
+    width: 100%; height: 100vh; height: 100lvh;
     z-index: 1;
     outline: none;
 }
@@ -1049,8 +1050,10 @@ function governResolution(interval) {
     frameIntervals.push(interval);
     if (frameIntervals.length < 60) return;
     const sorted = frameIntervals.splice(0).sort((a, b) => a - b);
-    const median = sorted[sorted.length >> 1];
-    if (median > 24 && governorScale > 0.6) {
+    // Step down as soon as a quarter of the frames miss, not half: on a phone, one frame
+    // in four dropped already reads as stutter.
+    const slow = sorted[Math.floor(sorted.length * 0.75)];
+    if (slow > 24 && governorScale > 0.6) {
         governorScale = Math.max(0.6, governorScale - 0.15);
         const next = targetPixelRatio();
         if (Math.abs(next - pixelRatio) > 0.01) {
@@ -1107,7 +1110,10 @@ const sparkCount = 320;
 const sparkData = [];
 const sugarDrops = [];   // small blown-sugar spheres drifting around the flame
 
-const sizes = { width: window.innerWidth, height: window.innerHeight };
+// width × height: the canvas, sized to the tallest viewport (CSS 100lvh). visible: the
+// height actually on screen, which the camera composes for; view: the same, eased.
+const sizes = { width: window.innerWidth, height: window.innerHeight,
+                visible: window.innerHeight, view: window.innerHeight };
 
 const V2 = (x = 0, y = 0) => new THREE.Vector2(x, y);
 const cross2 = (a, b) => a.x * b.y - a.y * b.x;
@@ -1634,7 +1640,7 @@ function roundedRectShape(w, h, r) {
 }
 
 function cardUnitsPerPixel() {
-    return 2 * CARD_DISTANCE * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / sizes.height;
+    return 2 * CARD_DISTANCE * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / sizes.view;
 }
 
 function buildGlassCardGeometry(w, h, unitsPerPixel) {
@@ -1684,7 +1690,7 @@ function updateGlassCard() {
         glassCard.userData = { w, h };
     }
     const cx = rect.left + rect.width / 2 - sizes.width / 2;
-    const cy = sizes.height / 2 - (rect.top + rect.height / 2);
+    const cy = sizes.view / 2 - (rect.top + rect.height / 2);
     glassCard.position.set(cx * upp, cy * upp, -CARD_DISTANCE);
     // A whisper of parallax so the highlights travel with the pointer.
     glassCard.rotation.set(-mouseY * 0.02, mouseX * 0.025, 0);
@@ -1705,7 +1711,7 @@ function smoothScrollRange(scroll, start, end) {
 // columns. Portrait (phones, tablets): orbit further out and stack vertically, the
 // object taking the lower half on slides 1 and 3 and the upper half on 2 and 4.
 function cameraFrame(scroll) {
-    const aspect = sizes.width / sizes.height;
+    const aspect = sizes.width / sizes.view;
     const portrait = THREE.MathUtils.clamp((1.0 - aspect) / 0.2, 0, 1);
     const separation = getLogoSeparation(scroll);
     const morph = smoothScrollRange(scroll, 0.40, 0.54);
@@ -1950,15 +1956,31 @@ function createBackgroundShader() {
     camera.add(bgMesh);                    // attach to camera so it always fills view
 }
 
+// Phones: the browser bars slide in and out while scrolling and change the window height
+// each time. Reallocating the canvas then costs a visible hitch (10 ms and more, measured),
+// so the canvas keeps the tallest viewport height and only the camera follows the visible
+// height. Returns true when the width changed.
 function onWindowResize() {
-    sizes.width = window.innerWidth;
-    sizes.height = window.innerHeight;
-    camera.aspect = sizes.width / sizes.height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(sizes.width, sizes.height);
-    pixelRatio = targetPixelRatio();
-    renderer.setPixelRatio(pixelRatio);
-    if (shaderUniforms) renderer.getDrawingBufferSize(shaderUniforms.uResolution.value);
+    const width = window.innerWidth;
+    const height = Math.max(canvas.clientHeight, window.innerHeight);
+    const widthChanged = width !== sizes.width;
+    sizes.visible = window.innerHeight;
+    if (widthChanged || height !== sizes.height) {
+        sizes.width = width;
+        sizes.height = height;
+        pixelRatio = targetPixelRatio();
+        renderer.setDrawingBufferSize(width, height, pixelRatio);
+        renderer.getDrawingBufferSize(shaderUniforms.uResolution.value);
+    }
+    frameCamera();
+    return widthChanged;
+}
+
+// The visible part is the top of the canvas: the camera frames it, and the strip below,
+// under the browser bar, continues the same view.
+function frameCamera() {
+    camera.aspect = sizes.width / sizes.view;
+    camera.setViewOffset(sizes.width, sizes.view, 0, 0, sizes.width, sizes.height);
 }
 
 window.addEventListener('mousemove', (event) => {
@@ -1986,7 +2008,10 @@ function updateCursorLabel() {
     const text = targetContact > 0.02 ? 'CONTACT' : String(Math.round(currentScroll * 100)).padStart(3, '0');
     if (text !== cursorLabelText) { label.textContent = text; cursorLabelText = text; }
 }
-window.addEventListener('resize', () => { onWindowResize(); headerState.chapter = -1; fitTitles(); });
+window.addEventListener('resize', () => {
+    // Titles fit the width: a browser bar changing only the height leaves them alone.
+    if (onWindowResize()) { headerState.chapter = -1; fitTitles(); }
+});
 
 function splitTitlesIntoLines() {
     document.querySelectorAll('.slide-title').forEach(title => {
@@ -2122,6 +2147,12 @@ function animate(now = performance.now()) {
             }
         }
         sparkParticles.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // Browser bars: the composition eases to the new visible height instead of jumping.
+    if (Math.abs(sizes.view - sizes.visible) > 0.5) {
+        sizes.view += (sizes.visible - sizes.view) * damping(reducedMotion ? 1 : 0.15);
+        frameCamera();
     }
 
     // 3. camera orbits the model 360° driven by scroll
@@ -2389,8 +2420,8 @@ function init() {
         alpha: false,
         powerPreference: "high-performance"
     });
-    renderer.setSize(sizes.width, sizes.height);
-    renderer.setPixelRatio(pixelRatio);
+    // The canvas's displayed size is CSS (100% × 100lvh); only its pixels are set here.
+    renderer.setDrawingBufferSize(sizes.width, sizes.height, pixelRatio);
 
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
