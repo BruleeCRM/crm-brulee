@@ -2070,14 +2070,18 @@ function updateLogoPieces(scroll) {
 function createBackgroundShader() {
     const vertexShader = `
         varying vec2 vUv;
+        varying vec2 vNdc;
         void main() {
             vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            // The plane faces the camera, so this is exact per pixel once interpolated.
+            vNdc = gl_Position.xy / gl_Position.w;
         }
     `;
 
     const fragmentShader = `
         varying vec2 vUv;
+        varying vec2 vNdc;
         uniform float uTime;
         uniform vec2 uResolution;
         uniform vec2 uMouse;
@@ -2101,7 +2105,9 @@ function createBackgroundShader() {
             return mix(uC2, uC3, smoothstep(0.66, 0.94, progress));
         }
         void main() {
-            vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
+            // Screen position from the plane itself, not from gl_FragCoord: the glass also
+            // draws this background into its refraction buffer, at half the resolution.
+            vec2 uv = 0.5 * vNdc * vec2(uResolution.x / uResolution.y, 1.0);
             float s = uScroll;
             float time = uTime * 0.065;
             vec3 tint = chapterTint(s);
@@ -2686,6 +2692,10 @@ function startScene() {
     // The canvas's displayed size is CSS (100% × 100lvh); only its pixels are set here.
     renderer.setDrawingBufferSize(sizes.width, sizes.height, pixelRatio);
 
+    // What shows through the glass is rendered at half the resolution of the screen: a
+    // quarter of the pixels for the most expensive pass of the page. The background it
+    // refracts is soft, so the difference does not show (measured, near pixel-identical).
+    renderer.transmissionResolutionScale = 0.5;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
     const ambientLight = new THREE.AmbientLight(BRAND.reflet, 0.15);
