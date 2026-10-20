@@ -66,6 +66,10 @@ let iconHoles = [];                      // its holes, punched once the fragment
 let lastLogoMorph = -1;
 const timer = new THREE.Timer();
 let currentScroll = 0;   // smoothed accumulated scroll for lerping
+let scrollSpeed = 0;     // its rate of change per second, for the spring that drives it
+// Seconds the scene takes to glide to a chapter (the spring's smoothing time): the chapter's
+// text comes up after about 0.8 s, and the glide ends without a jolt at either end.
+const SCROLL_GLIDE = 0.6;
 let currentContact = 0, targetContact = 0;   // 0..1 progress into the contact chapter
 const stageElement = document.querySelector('.scroll-stage');
 const contactSection = document.querySelector('#contact');
@@ -94,6 +98,8 @@ function targetPixelRatio() {
 }
 let pixelRatio = targetPixelRatio();
 const frameIntervals = [];
+let visitStarted = false;
+window.addEventListener('scroll', () => { if (window.scrollY > 0) visitStarted = true; }, { passive: true });
 function governResolution(interval) {
     if (interval > 250) return;                       // a hitch or a wake-up, not a trend
     frameIntervals.push(interval);
@@ -103,14 +109,17 @@ function governResolution(interval) {
     // in four dropped already reads as stutter.
     const slow = sorted[Math.floor(sorted.length * 0.75)];
     // Already at the lowest resolution and still under 22 fps: the device cannot carry
-    // the scene. Near the top of the page, switch to the version without 3D; further
-    // down, the switch would move the page under the visitor's eyes, so the scene stays.
-    if (slow > 45 && governorScale <= 0.6 && window.scrollY < window.innerHeight) {
+    // the scene. Before the visitor's first scroll, switch to the version without 3D; once
+    // the visit has started, even back on the opening screen (one gesture away now that the
+    // scroll rests on chapters), the switch would take the scene away mid-visit, so it stays.
+    if (slow > 45 && governorScale <= 0.6 && !visitStarted) {
         enterStaticVersion('appareil trop lent');
         return;
     }
     if (slow > 24 && governorScale > 0.6) {
-        governorScale = Math.max(0.6, governorScale - 0.15);
+        // Far too slow: go most of the way at once (the cost follows the pixel count, the
+        // square of the scale), so the first chapter change already runs at the right size.
+        governorScale = Math.max(0.6, Math.min(governorScale - 0.15, governorScale * Math.sqrt(22 / slow)));
         const next = targetPixelRatio();
         if (Math.abs(next - pixelRatio) > 0.01) {
             pixelRatio = next;
@@ -1215,6 +1224,9 @@ canvas.addEventListener('webglcontextlost', () => enterStaticVersion('contexte W
 let animationRequest = 0;
 let lastFrameAt = 0, lastFrameFps = 0;
 let lastInputAt = performance.now();
+// The first seconds on screen run at the full frame rate even without input: the resolution
+// governor measures only those frames, and must size the scene before the first scroll.
+let warmUntil = 0;
 for (const event of ['scroll', 'pointermove', 'pointerdown', 'keydown', 'resize']) {
     window.addEventListener(event, () => { lastInputAt = performance.now(); }, { passive: true });
 }
@@ -1235,7 +1247,8 @@ function animate(now = performance.now()) {
     animationRequest = requestAnimationFrame(animate);
     const unsettled = Math.abs(THREE.MathUtils.clamp(window.scrollY / stageMaxScroll(), 0, 1) - currentScroll) > 0.0001
         || Math.abs(targetContact - currentContact) > 0.0001;
-    const fps = unsettled || now - lastInputAt < 1500 ? 60 : 30;
+    if (document.body.classList.contains('is-loading')) warmUntil = now + 3000;
+    const fps = unsettled || now - lastInputAt < 1500 || now < warmUntil ? 60 : 30;
     if (lastFrameAt && now - lastFrameAt < 1000 / fps - 1) return;
     // Only 60 fps stretches say anything about the GPU; the idle 30 fps mode is deliberate.
     // Nor while the fragments are being rebuilt on the CPU (recomposition): resolution
@@ -1259,11 +1272,23 @@ function animate(now = performance.now()) {
     targetContact = contactSection
         ? THREE.MathUtils.clamp((scrollTop - maxScroll) / window.innerHeight, 0, 1) : 0;
 
-    // smooth physical lerp (inertia); the icon must be whole quickly once the form is reached.
-    // The scroll rests on chapters now: the scene glides there in about a second, so the
-    // chapter's text shows before the visitor thinks of scrolling again (the camera follows at
-    // the same pace). Reduced motion: the scene tracks the scroll almost directly, no glide.
-    currentScroll += (targetScroll - currentScroll) * damping(reducedMotion ? 0.35 : 0.04);
+    // The scroll moves a whole chapter at once now, so the scene follows on a critically
+    // damped spring rather than a plain lerp: a lerp moves fastest on the very first frame,
+    // which reads as a jolt when frames are slow, while the spring sets off gently, peaks
+    // midway at about half the speed and settles without overshoot (the SmoothDamp
+    // approximation, stable at any frame time). The icon must be whole quickly once the
+    // form is reached.
+    // Reduced motion: the scene tracks the scroll almost directly, no glide.
+    if (reducedMotion) {
+        currentScroll += (targetScroll - currentScroll) * damping(0.35);
+        scrollSpeed = 0;
+    } else {
+        const omega = 2 / SCROLL_GLIDE, x = omega * deltaTime;
+        const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+        const offset = currentScroll - targetScroll, kick = (scrollSpeed + omega * offset) * deltaTime;
+        scrollSpeed = (scrollSpeed - omega * kick) * decay;
+        currentScroll = targetScroll + (offset + kick) * decay;
+    }
     currentContact += (targetContact - currentContact) * damping(reducedMotion ? 0.35 : 0.06);
     if (Math.abs(targetContact - currentContact) < 0.0015) currentContact = targetContact;
 
@@ -1559,6 +1584,7 @@ window.__glassSite = {
         document.documentElement.classList.remove('snap-chapters');
         window.scrollTo(0, stageMaxScroll() * value);
         currentScroll = value;
+        scrollSpeed = 0;
         currentContact = targetContact = 0;
         // Let the camera settle immediately as well.
         const phi = value * Math.PI * 2.0;
